@@ -17,8 +17,17 @@ type Header struct {
 }
 
 type Body struct {
+	ReqeustStart *RequestStartBody
 	Length int
 	Contents []string
+}
+
+type RequestStartBody struct {
+	Action string
+	Url string
+	Ip string
+	Date string
+	Time string
 }
 
 func main() {
@@ -46,7 +55,7 @@ func main() {
 	for i := 0; i < len(logs); i++ {
 		header, body := ParseLog(logs[i])
 
-		if len(header.Uuid) == 0 {
+		if header == nil {
 			continue
 		}
 
@@ -75,6 +84,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
      	}
+     	resultFile.WriteString("\n")
      	fmt.Println(headerLength)
 
     	body_in_json, err := json.Marshal(bodies[uuid])
@@ -86,8 +96,10 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
      	}
+     	resultFile.WriteString("\n")
      	fmt.Println(bodyLength)
     }
+    resultFile.Sync()
 
     fmt.Println("Done!")
 }
@@ -106,10 +118,30 @@ func ParseLog(str string) (*Header, string) {
 			Username: matches[7] }
 		return header, matches[8]
 	}
-	return &Header{}, ""
+	return nil, ""
+}
+
+func ParseBody(str string) (*RequestStartBody) {
+	expr := `Started (\w+) "([^"]+)" for ([\d\.]+) at (\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2} [+-]\d{4})`
+	log, _ := regexp.Compile(expr)
+	if len(log.FindString(str)) > 0 {
+		matches := log.FindStringSubmatch(str)
+		requestStartBody := &RequestStartBody{
+			Action: matches[1],
+			Url: matches[2],
+			Ip: matches[3],
+			Date: matches[4],
+			Time: matches[5] }
+		return requestStartBody
+	}
+	return nil
 }
 
 func (body *Body) AddContent(content string) {
 	body.Contents[body.Length] = content
 	body.Length = body.Length + 1
+	parsed_body := ParseBody(content)
+	if parsed_body != nil {
+		body.ReqeustStart = parsed_body
+	}
 }
