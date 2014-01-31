@@ -18,7 +18,7 @@ type Header struct {
 }
 
 type Body struct {
-	ReqeustStart *RequestStartBody
+	RequestStart *RequestStartBody
 	Processor *ProcessorBody
 	Parameters *ParametersBody
 	Complete *CompleteBody
@@ -53,7 +53,7 @@ type CompleteBody struct {
 
 func main() {
 	file, err := os.Open("example.log")
-	var logs [128]string
+	var logs [66536]string
 	headers := make(map[string]*Header)
 	bodies := make(map[string]*Body)
 	var log_count int
@@ -73,10 +73,11 @@ func main() {
 		log_count += 1
 	}
 
-	for i := 0; i < len(logs); i++ {
+	for i := 0; i < log_count; i++ {
 		header, body := ParseLog(logs[i])
 
 		if header == nil {
+			fmt.Printf("failed to parse header : %s\n", logs[i])
 			continue
 		}
 
@@ -84,7 +85,7 @@ func main() {
 			bodies[value.Uuid].AddContent(body)
 		} else {
 			headers[header.Uuid] = header
-			bodies[header.Uuid] = &Body {Length: 0, Contents: make([]string, 10)}
+			bodies[header.Uuid] = &Body {Length: 0, Contents: make([]string, 32)}
 			bodies[header.Uuid].AddContent(body)
 		}
 	}
@@ -126,7 +127,7 @@ func main() {
 }
 
 func ParseLog(str string) (*Header, string) {
-	expr := `(\w{3}) (\d+) (\d{2}:\d{2}:\d{2}) ([\d\.]+) production.log: \[([\w\d-]+)\] (\[([\w\d]+)\])? (.*)`
+	expr := `(\w{3}) (\d+) (\d{2}:\d{2}:\d{2}) ([\d\.]+) production.log: \[([\w\d-]+)\] (\[([\w\d]+)\])?(.*)`
 	log, _ := regexp.Compile(expr)
 	if len(log.FindString(str)) > 0 {
 		matches := log.FindStringSubmatch(str)
@@ -159,7 +160,7 @@ func ParseRequestStartBody(str string) (*RequestStartBody) {
 }
 
 func ParseProcessorBody(str string) (*ProcessorBody) {
-	expr := `Processing by ([:\w]+)#(\w+) as (.*)`
+	expr := `Processing by ([:\w]+)#(\w+) as (.*)?`
 	log, _ := regexp.Compile(expr)
 	if len(log.FindString(str)) > 0 {
 		matches := log.FindStringSubmatch(str)
@@ -202,11 +203,9 @@ func ParseCompleteBody(str string) (*CompleteBody) {
 }
 
 func (body *Body) AddContent(content string) {
-	body.Contents[body.Length] = content
-	body.Length = body.Length + 1
 	request_start_body := ParseRequestStartBody(content)
 	if request_start_body != nil {
-		body.ReqeustStart = request_start_body
+		body.RequestStart = request_start_body
 		return
 	}
 	processor_body := ParseProcessorBody(content)
@@ -223,5 +222,11 @@ func (body *Body) AddContent(content string) {
 	if complete_body != nil {
 		body.Complete = complete_body
 		return
+	}
+	if body.Length < 32 {
+		body.Contents[body.Length] = content
+		body.Length = body.Length + 1
+	} else {
+		fmt.Println("exceeded")
 	}
 }
