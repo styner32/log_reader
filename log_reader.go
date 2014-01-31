@@ -5,26 +5,27 @@ import "log"
 import "fmt"
 import "bufio"
 import "regexp"
+import "encoding/json"
 
 type Header struct {
-	month string
-	date string
-	time string
-	ip string
-	uuid string
-	username string
+	Month string
+	Date string
+	Time string
+	Ip string
+	Uuid string
+	Username string
 }
 
 type Body struct {
-	length int
-	contents []string
+	Length int
+	Contents []string
 }
 
 func main() {
 	file, err := os.Open("example.log")
 	var logs [128]string
-	headers := make(map[string]Header)
-	bodies := make(map[string]Body)
+	headers := make(map[string]*Header)
+	bodies := make(map[string]*Body)
 	var log_count int
 
 	if err != nil {
@@ -44,40 +45,71 @@ func main() {
 
 	for i := 0; i < len(logs); i++ {
 		header, body := ParseLog(logs[i])
-		if value,ok := headers[header.uuid]; ok {
-			bodies[value.uuid].AddContent(body)
+
+		if len(header.Uuid) == 0 {
+			continue
+		}
+
+		if value,ok := headers[header.Uuid]; ok {
+			bodies[value.Uuid].AddContent(body)
 		} else {
-			headers[header.uuid] = header
-			bodies[header.uuid] = Body {
-				length: 0,
-				contents: make([]string, 5) }
-			bodies[header.uuid].AddContent(body)
+			headers[header.Uuid] = header
+			bodies[header.Uuid] = &Body {Length: 0, Contents: make([]string, 10)}
+			bodies[header.Uuid].AddContent(body)
 		}
 	}
 
-	fmt.Println(headers)
-	fmt.Println(bodies)
+	resultFile, err := os.Create("result.json")
+ 	if err != nil {
+		log.Fatal(err)
+ 	}
+ 	defer resultFile.Close()
+
+	for uuid, header := range headers {
+   		header_in_json, err := json.Marshal(header)
+     	if err != nil {
+			log.Fatal(err)
+     	}
+
+     	headerLength, err := resultFile.Write(header_in_json)
+		if err != nil {
+			log.Fatal(err)
+     	}
+     	fmt.Println(headerLength)
+
+    	body_in_json, err := json.Marshal(bodies[uuid])
+     	if err != nil {
+			log.Fatal(err)
+     	}
+
+		bodyLength, err := resultFile.Write(body_in_json)
+		if err != nil {
+			log.Fatal(err)
+     	}
+     	fmt.Println(bodyLength)
+    }
+
+    fmt.Println("Done!")
 }
 
-func ParseLog(str string) (Header, string) {
+func ParseLog(str string) (*Header, string) {
 	expr := `(\w{3}) (\d+) (\d{2}:\d{2}:\d{2}) ([\d\.]+) production.log: \[([\w\d-]+)\] (\[([\w\d]+)\])? (.*)`
 	log, _ := regexp.Compile(expr)
 	if len(log.FindString(str)) > 0 {
 		matches := log.FindStringSubmatch(str)
-		header := Header{
-			month: matches[1],
-			date: matches[2],
-			time: matches[3],
-			ip: matches[4],
-			uuid: matches[5],
-			username: matches[7] }
+		header := &Header{
+			Month: matches[1],
+			Date: matches[2],
+			Time: matches[3],
+			Ip: matches[4],
+			Uuid: matches[5],
+			Username: matches[7] }
 		return header, matches[8]
 	}
-	return Header{}, ""
+	return &Header{}, ""
 }
 
-func (body Body) AddContent(content string) {
-	body.contents[body.length] = content
-	body.length = body.length + 1
-
+func (body *Body) AddContent(content string) {
+	body.Contents[body.Length] = content
+	body.Length = body.Length + 1
 }
